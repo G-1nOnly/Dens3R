@@ -1,0 +1,112 @@
+div#comparison {
+    width: 60vw;
+    height: 45.1785714286vw;
+    max-width: 2024px;
+    max-height: 2688px;
+    overflow: hidden;
+ }
+  div#comparison figure {
+    background-image: url(https://www.cs.umd.edu/~hadi/defocus-control.github.io/static/images/tiltshift_output.jpg);
+    background-size: cover;
+    position: relative;
+    font-size: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+  }
+  div#comparison figure > img {
+    position: relative;
+    width: 100%;
+  }
+  div#comparison figure div {
+    background-image: url(https://www.cs.umd.edu/~hadi/defocus-control.github.io/static/images/tiltshift_src_w.jpg);
+    background-size: cover;
+    position: absolute;
+    width: 50%;
+    box-shadow: 0 5px 10px -2px rgba(0,0,0,0.3);
+    overflow: hidden;
+    bottom: 0;
+    height: 100%;
+    margin: 0;
+  }
+
+  #compare_slider{
+    -webkit-appearance:none;
+    -moz-appearance:none;
+    position: relative;
+    top: -4rem; left: -1%;
+    background-color: rgba(255,255,255,0.1);
+    width: 102%;
+  }
+  #compare_slider[type=range]:focus {
+    outline: none;
+  }
+  #compare_slider[type=range]:active {
+    outline: none;
+  }
+
+  #compare_slider[type=range]::-moz-range-track {
+    -moz-appearance:none;
+      height:15px;
+      width: 98%;
+      background-color: rgba(255,255,255,0.1);
+      position: relative;
+      outline: none;
+   }
+  #compare_slider[type=range]::active {
+    border: none;
+    outline: none;
+  }
+  #compare_slider[type=range]::-webkit-slider-thumb {
+      -webkit-appearance:none;
+      width: 20px; height: 15px;
+      background: #fff;
+      border-radius: 0;
+     }
+  #compare_slider[type=range]::-moz-range-thumb {
+    -moz-appearance: none;
+    width: 20px;
+    height: 15px;
+    background: #fff;
+    border-radius: 0;
+       }
+  #compare_slider[type=range]:focus::-webkit-slider-thumb {
+      background: rgba(255,255,255,0.5);
+     }
+  #compare_slider[type=range]:focus::-moz-range-thumb {
+      background: rgba(255,255,255,0.5);
+     }
+
+     /* #compare_slider {
+        position: absolute;
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 100%;
+        background: rgba(242, 242, 242, 0.3);
+        outline: none;
+        margin: 0;
+        transition: all 0.2s;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      } */
+      /* #compare_slider:hover {
+        background: rgba(242, 242, 242, 0.1);
+      }
+      #compare_slider:-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 6px;
+        height: 600px;
+        background: white;
+        cursor: pointer;
+      }
+      #compare_slider:-moz-range-thumb {
+        width: 6px;
+        height: 600px;
+        background: white;
+        cursor: pointer;
+      } */
+
+      

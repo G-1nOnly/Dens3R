@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<title>jQuery Magnify Mobile Demo</title>
+<meta name="author" content="T. H. Doan">
+<meta name="description" content="This is a live demo of the jQuery Magnify plugin.">
+<link rel="stylesheet" href="css/magnify.css">
+<style>
+/* Demo CSS */
+html {
+  width: 100%;
+  height: 100%;
+  display: table;
+}
+body {
+  width: 100%;
+  height: 100%;
+  display: table-cell;
+  font-family: sans-serif;
+  font-size: 12px;
+  padding: 1em;
+  text-align: center;
+  vertical-align: middle;
+}
+img {
+  border: none;
+}
+small {
+  font-weight: normal;
+}
+#sample-glasses {
+  width: 100%;
+  max-width: 400px;
+}
+#sample-watch {
+  width: 100%;
+  max-width: 210px;
+}
+</style>
+</head>
+<body>
+
+<h3>View on your smartphone<br><small>(tap on image to zoom)</small></h3>
+
+<!-- <img> is the small image; the URI to the large image can be placed in the
+     'data-magnify-src' attribute (watch-large.jpg), linked to in the parent <a>
+     tag (glasses-large.jpg), or passed as the 'src' option when calling the
+     .magnify() function. -->
+
+<img id="sample-watch" src="https://i.imgur.com/jnRTmfe.jpg" alt="Sample image" class="zoom" data-magnify-src="https://i.imgur.com/z9yzdPO.jpg">
+
+&nbsp; &nbsp; &nbsp;
+
+<a href="https://i.imgur.com/n1xHDD4.jpg">
+  <img id="sample-glasses" src="https://i.imgur.com/55Hondr.jpg" alt="Sample image" class="zoom">
+</a>
+
+<!--[if lt IE 9]>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<![endif]-->
+<!--[if IE 9]><!-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+<!--<![endif]-->
+<script src="js/jquery.magnify.js"></script>
+<script src="js/jquery.magnify-mobile.js"></script>
+<script>
+$(document).ready(function() {
+  // Initiate magnification powers
+  $('.zoom').magnify({
+    afterLoad: function() {
+      console.log('Magnification powers activated!');
+    }
+  });
+});
+</script>
+<script>
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+ga('create', 'UA-2843793-6', 'auto');
+ga('send', 'pageview');
+</script>
+</body>
+</html>

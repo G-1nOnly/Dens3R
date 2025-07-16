@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=0">
+<!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge"><![endif]-->
+<title>jQuery Magnify Accordion Demo</title>
+<meta name="author" content="T. H. Doan">
+<meta name="description" content="This is a live demo of the jQuery Magnify plugin.">
+<link rel="stylesheet" href="css/magnify.css">
+<style>
+body {
+  font-family: sans-serif;
+  font-size: 16px;
+  margin: 8px;
+}
+img {
+  width: 100%;
+  max-width: 400px;
+  border: none;
+}
+
+/* Zebra Accordion plugin */
+#accordion {
+  width: 40%;
+  min-width: 304px;
+  margin: 2rem auto;
+}
+#accordion dd {
+  display: none;
+  margin: 0;
+  padding: 1rem;
+}
+#accordion dt {
+  background: #c40000;
+  border-bottom: 1px solid #fff;
+  color: #fff;
+  cursor: pointer;
+  font-weight: bold;
+  padding: 0.5rem;
+}
+#accordion dt:hover {
+  opacity: 0.8;
+}
+</style>
+</head>
+<body>
+
+<dl id="accordion" class="Zebra_Accordion">
+  <dt title="Toggle section">Section 1</dt>
+  <dd>
+    Lorem ipsum dolor sit amet consectetuer facilisis lacinia sapien ac et.
+    Quis hendrerit neque congue pretium iaculis justo laoreet orci elit condimentum.
+    Eros natoque Curabitur accumsan eget quis porttitor Sed Vestibulum amet sed.
+  </dd>
+  <dt title="Toggle section">Section 2</dt>
+  <dd style="text-align:center">
+    <a href="https://i.imgur.com/n1xHDD4.jpg">
+      <img id="sample-glasses" src="https://i.imgur.com/55Hondr.jpg" alt="Sample image" class="zoom">
+    </a>
+  </dd>
+  <dt title="Toggle section">Section 3</dt>
+  <dd>
+    Lorem ipsum dolor sit amet consectetuer facilisis lacinia sapien ac et.
+    Quis hendrerit neque congue pretium iaculis justo laoreet orci elit condimentum.
+    Eros natoque Curabitur accumsan eget quis porttitor Sed Vestibulum amet sed.
+  </dd>
+</dl>
+
+<!--[if lt IE 9]>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<![endif]-->
+<!--[if IE 9]><!-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+<!--<![endif]-->
+<script src="https://cdn.rawgit.com/stefangabos/Zebra_Accordion/b999e40c/dist/zebra_accordion.min.js"></script>
+<script src="js/jquery.magnify.js"></script>
+<script>
+$(document).ready(function() {
+  // Initiate accordion
+  new $.Zebra_Accordion($('#accordion'), {
+    'collapsible':  true
+  });
+  // Initiate magnification powers
+  $('.zoom').magnify({
+    afterLoad: function() {
+      console.log('Magnification powers activated!');
+    }
+  });
+});
+</script>
+<script>
+(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+ga('create', 'UA-2843793-6', 'auto');
+ga('send', 'pageview');
+</script>
+</body>
+</html>
