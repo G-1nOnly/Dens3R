@@ -9,7 +9,7 @@
 Official implementation of "Dens3R: A Foundation Model for 3D Geometry Prediction".
 
 <div align="center">
-  <img src="assets/Teaser.png"/>
+  <img src="assets/Teaser.jpg"/>
 </div><br/>
 
 ## Code Coming Soon.
