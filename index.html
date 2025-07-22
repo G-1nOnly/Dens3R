@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+        content="Dens3R: A Foundation Model for 3D Geometry Prediction">
+  <meta name="keywords" content="neural surfaces, nerf, implicit neural representation, computer vision">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dens3R: A Foundation Model for 3D Geometry Prediction</title>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+        rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+  <link rel="stylesheet" href="./static/css/before_after.css">
+  <!-- <link rel="icon" href="./static/images/cameraicon.svg"> -->
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://unpkg.com/imagesloaded@5/imagesloaded.pkgd.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+  <link rel="stylesheet" href="./static/css/magnify.css">
+  <script src="//code.jquery.com/jquery-2.2.4.min.js"></script>
+  <script src="./static/js/jquery.magnify.js"></script>
+
+  <script src="twentytwenty/js/jquery-3.2.1.min.js" defer type="text/javascript"></script>
+  <script src="twentytwenty/js/jquery.event.move.js" defer type="text/javascript"></script>
+  <script src="twentytwenty/js/jquery.twentytwenty.js" defer type="text/javascript"></script>
+  <link rel="stylesheet" href="twentytwenty/css/twentytwenty.css" type="text/css" media="screen" />
+
+</head>
+
+<body>
+
+
+
+
+
+<nav class="navbar" role="navigation" aria-label="main navigation">
+  <div class="navbar-brand">
+    <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+      <span aria-hidden="true"></span>
+    </a>
+  </div>
+  <div class="navbar-menu">
+    <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
+      <a class="navbar-item" href="https://g-1nonly.github.io">
+      <span class="icon">
+          <i class="fas fa-home"></i>
+      </span>
+      </a>
+    </div>
+
+  </div>
+</nav>
+
+
+<section class="hero">
+  <div class="hero-body">
+    <div class="container is-max-desktop">
+      <div class="columns is-centered">
+        <div class="column has-text-centered">
+          <h1 class="title is-1 publication-title">Dens3R: A Foundation Model for 3D Geometry Prediction</h1>
+          <div class="is-size-5 publication-authors">
+            <span class="author-block">
+              Xianze Fang<sup>1*</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+              <a href="https://g-1nonly.github.io/">Jingnan Gao<sup>2*</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+              Zhe Wang<sup>1</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+              Zhuo Chen<sup>2</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+               <a href="https://xingyuren.github.io">Xingyu Ren<sup>2</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+              Jiangjing Lyu<sup>1†</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+              Qiaomu Ren<sup>1</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+              Zhonglei Yang<sup>1</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <span class="author-block">
+              <a href="https://english.seiee.sjtu.edu.cn/english/detail/842_802.htm">Xiaokang Yang<sup>2</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;
+            </span>
+            <span class="author-block">
+               <a href="https://daodaofr.github.io/">Yichao Yan<sup>2‡</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;
+            </span>
+            <span class="author-block">
+              Chengfei Lyu<sup>1</sup></a>&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          </div>
+
+          <div class="is-size-5 publication-authors">
+
+            <span class="author-block"><sup>1</sup>Alibaba Group &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<sup>2</sup>Shanghai Jiao Tong University &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            <p></p>
+            <span class="author-block"><sup>*</sup>Equal contribution &nbsp;&nbsp;&nbsp; <sup>†</sup> Project leader &nbsp;&nbsp;&nbsp; <sup>‡</sup> Corresponding author</span> 
+            <p>&nbsp;</p>
+            <h2 class="title is-3">Arxiv 2025</h2>
+            <!-- <span class="author-block"><sup></span> -->
+          </div>
+          <p>&nbsp;</p>
+          <script>
+            $(document).ready(function() {
+              // var $zoom = $('.zoom').magnify(
+              // //   {
+              // //   magnifiedWidth: 1000,
+              // //   magnifiedHeight: 753
+              // // }
+              // );
+              // $zoom.destroy();
+            });
+          </script>
+<style>
+.magnify > .magnify-lens {
+  width: 130px;
+  height: 130px;
+}
+</style>
+
+<style>
+  /* Style the buttons */
+  .btn {
+    border: none;
+    outline: none;
+    padding: 10px 16px;
+    background-color: #f1f1f1;
+    cursor: pointer;
+    font-size: 18px;
+    border-radius: 8px;
+  }
+  
+  /* Style the active class, and buttons on mouse-over */
+  .active, .btn:hover {
+    background-color: #666;
+    color: white;
+  }
+
+  /* .twentytwenty-container {
+    min-height: 200px;
+} */
+
+  </style>
+          <div class="column has-text-centered">
+            <div class="publication-links">
+              <span class="link-block">
+                <a href="https://arxiv.org/pdf/"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+              <span class="link-block">
+                <a href="https://github.com/G-1nOnly/Dens3R"
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                  </a>
+              </span>
+              <span class="link-block">
+                <a href=""
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      🤗
+                  </span>
+                  <span>Demo (Coming Soon)</span>
+                </a>
+              </span>
+              <!-- <span class="link-block">
+                <a href=""
+                   class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                      <i class="far fa-images"></i>
+                  </span>
+                  <span>Data(Coming Soon)</span>
+                  </a> -->
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<section class="hero is-light is-small">
+  <div class="hero-body">
+    <div class="container">
+      <center>
+        <img src="./static/images/teaser.png"  width="1000">
+      </center> 
+    </div>
+    <div  class="columns is-centered has-text-centered" style="text-align: center;">  
+       <p><br/>Dens3R is a feed-forward visual foundation model that takes unposed images as input and outputs high-quality 3D pointmap with <br> unified geometric dense prediction. Dens3R also accepts generalized inputs, supporting both multi-view and multi-resolution inputs.<br> As a versatile backbone, Dens3R achieves robust dense prediction under several scenarios and can be easily extended to downstream applications.</p> </div>
+  </div>
+</section>
+
+
+<section class="section">
+  <div class="container is-max-desktop">
+    <!-- Abstract. -->
+    <br>
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-five-sixths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            Recent advances in dense 3D reconstruction have led to significant progress, yet achieving accurate unified geometric prediction remains a major challenge. Most existing methods are limited to predicting a single geometry quantity from input images. However, geometric quantities such as depth, surface normals, and point maps are inherently correlated, and estimating them in isolation often fails to ensure consistency, thereby limiting both accuracy and practical applicability. This motivates us to explore a unified framework that explicitly models the structural coupling among different geometric properties to enable joint regression. In this paper, we present Dens3R, a 3D foundation model designed for joint geometric dense prediction and adaptable to a wide range of downstream tasks. Dens3R adopts a two-stage training framework to progressively build a pointmap representation that is both generalizable and intrinsically invariant. Specifically, we design a lightweight shared encoder-decoder backbone and introduce position-interpolated rotary positional encoding to maintain expressive power while enhancing robustness to high-resolution inputs. By integrating image-pair matching features with intrinsic invariance modeling, Dens3R accurately regresses multiple geometric quantities such as surface normals and depth, achieving consistent geometry perception from single-view to multi-view inputs. Additionally, we propose a post-processing pipeline that supports geometrically consistent multi-view inference. Extensive experiments demonstrate the superior performance of Dens3R across various dense 3D prediction tasks and highlight its potential for broader applications.
+          </p>
+        </div>
+        <center>
+          <img src="./static/images/2k_new.png"  width="1000">
+          <figcaption>High-quality geometric predictions for (2K) inputs. Please zoom in to better observe the fine-grained details.</figcaption>
+        </center> 
+      </div>
+    </div>
+    <!--/ Abstract. -->
+
+    <!-- Paper video. -->
+    <br>
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">Video</h2>
+        <div class="publication-video">
+          <iframe width="560" height="315" src="./video/dens3r.mp4" title="Video Player" frameborder="0"
+          allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+      </div>
+    </div>
+    <!--/ Paper video. -->
+
+    <br>
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-five-sixths">
+        <h2 class="title is-3">Overview</h2>
+        <div class="content has-text-justified">
+         This work aims to utilize a single model to predict various geometric data from unconstrained images, including 3D pointmaps, depth maps, normal maps, and image-pair matching. To this end, we built a backbone network based on dense visual transformers and designed input configurations that adapt to multi-resolution and multi-view requirements. In the first stage, we train the backbone and heads to obtain scale-invariant pointmaps. In the second stage, we fine-tune the backbone on this foundation to obtain intrinsic-invariant pointmaps. Finally, we fine-tune the prediction heads for each downstream task to adapt to different application scenarios.
+          <br> <br>
+            <center>
+            <img src="./static/images/pipeline.png"  width="1000">
+            </center> 
+        <br> 
+        </div>
+      </div>
+    </div>
+
+    <br>
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-full-width">
+        <h2 class="title is-3">Results</h2>
+        <div class="content has-text-justified">
+          <style>
+            .grid-container {
+              display: grid;
+              grid-template-columns: repeat(2, 1fr); /* Creates 2 columns with equal width */
+              grid-gap: 10px; /* Adjust the gap between the divs */
+            }
+            .grid-item {
+              width: 100%;
+            }
+          </style>
+
+          <h3 class="title is-4">High-quality Geometric Predictions</h3>
+          <center>
+            <img src="./static/images/vis.png"  width="1000">
+            <img src="./static/images/prediction.png"  width="1000">
+          </center> 
+
+          <h3 class="title is-4">Normal Comparison</h3>
+          <center>
+            <img src="./static/images/normal.png"  width="1000">
+            <img src="./static/images/normal_sup.png"  width="950">
+          </center> 
+
+          <h3 class="title is-4">Depth and Pointmap Comparison</h3>
+          <center>
+            <img src="./static/images/depth_pm.png"  width="1000">
+            <img src="./static/images/depth_indoor.png"  width="1000">
+            <img src="./static/images/depth_outdoor.png"  width="1000">
+          </center> 
+
+          <h3 class="title is-4">Image-pair Matching</h3>
+          <center>
+            <img src="./static/images/matching.png"  width="950">
+          </center> 
+
+          <h3 class="title is-4">High-Resolution Inference Comparison</h3>
+          <center>
+            <img src="./static/images/hq.png"  width="1000">
+          </center> 
+
+      </div>
+    </div> 
+
+    
+
+    <!-- <div class="columns is-centered has-text-centered">
+      <div class="column is-full-width">
+        <div class="content has-text-justified">
+          
+        <script>
+    
+        $(window).on('load',function() {
+          $("#images_t").twentytwenty({
+    default_offset_pct: 0.5, // How much of the before image is visible when the page loads
+    orientation: 'horizontal', // Orientation of the before and after images ('horizontal' or 'vertical')
+    before_label: 'Input', // Set a custom before label
+    after_label: 'Output', // Set a custom after label
+    no_overlay: true, //Do not show the overlay with before and after
+    move_slider_on_hover: true, // Move slider on mouse hover?
+    move_with_handle_only: true, // Allow a user to swipe anywhere on the image to control slider movement. 
+    click_to_move: true // Allow a user to click (or tap) anywhere on the image to move the slider to that location.
+  });
+        });
+        </script>
+          
+        </div>
+      </div>
+    </div> -->
+    
+  </div>
+</section>
+
+
+<section class="section" id="BibTeX">
+  <div class="container is-max-desktop content">
+    <h2 class="title" style="text-align: center;">BibTeX</h2>
+    <pre><code>@article{dens3r,
+      title={Dens3R: A Foundation Model for 3D Geometry Prediction}, 
+      author={Xianze Fang and Jingnan Gao and Zhe Wang and Zhuo Chen and Xingyu Ren and Jiangjing Lyu and Qiaomu Ren and Zhonglei Yang and Xiaokang Yang and Yichao Yan and Chengfei Lyu},
+      journal={arXiv preprint arXiv:},
+      year={2025}
+}
+</code></pre>
+</div>
+</section>
+
+
+<footer class="footer">
+  <div class="container">
+    <!-- <div class="content has-text-centered">
+      <a class="icon-link"
+         href="">
+        <i class="fas fa-file-pdf"></i>
+      </a>
+      <a class="icon-link" href="https://github.com/oppo-us-research/NeuRBF" class="external-link" disabled>
+        <i class="fab fa-github"></i>
+      </a>
+    </div> -->
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+          <p>
+            This website is licensed under a <a rel="license"
+                                                href="http://creativecommons.org/licenses/by-sa/4.0/">Creative
+            Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+          <p>
+            This great website template was borrowed from <a
+              href="https://oppo-us-research.github.io/NeuRBF-website/">NeuRBF</a>!
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
