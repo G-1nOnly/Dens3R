@@ -12,7 +12,7 @@ Official implementation of "Dens3R: A Foundation Model for 3D Geometry Predictio
   <img src="assets/Teaser.jpg"/>
 </div><br/>
 
-## Code Coming Soon.
+## The inference code and model will be released next week with an automated 3D object reconstruction pipeline.
 
 ## BibTeX
 ```bibtex
