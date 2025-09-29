@@ -1,0 +1,15 @@
+defaults:
+  - base_config
+  - override triangulation: pairs_from_poses
+  - _self_
+
+sfm_mode: idr2colmap
+idr2colmap:
+  save_dirname: sfm_from_idr
+triangulation:
+  reference_sfm_reldir: sfm_from_idr
+decomp:
+  sfm_preprocess:
+    use_cache: True
+    online: True
+    visualize: True

@@ -1,0 +1,25 @@
+# torch and torchvision can use other versions
+# just to match your cuda version
+torch==2.7.1+cu118
+torchvision==0.22.1+cu118
+asmk==0.1.1
+einops==0.8.1
+faiss==1.5.3
+h5py==3.14.0
+matplotlib==3.10.5
+numpy==2.3.2
+open3d==0.19.0
+opencv_python==4.12.0.88
+OpenEXR==3.3.5
+Pillow==11.3.0
+pillow_heif==1.1.0
+pycolmap==3.10.0 # version must be 3.10.0
+quaternion==3.5.2.post4
+scikit_learn==1.7.1
+scipy==1.16.1
+setuptools==78.1.1
+tqdm==4.66.4
+trimesh==4.7.4
+kornia==0.8.1
+gradio==5.44.1
+albumentations

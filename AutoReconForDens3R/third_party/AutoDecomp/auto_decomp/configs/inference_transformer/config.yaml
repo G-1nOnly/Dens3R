@@ -1,0 +1,9 @@
+defaults:
+  - base_config
+  - _self_
+
+decomp:
+  sfm_preprocess:
+    use_cache: True
+    online: True
+    visualize: True

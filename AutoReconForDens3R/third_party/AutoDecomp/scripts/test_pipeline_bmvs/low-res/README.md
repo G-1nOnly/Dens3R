@@ -1,0 +1,1 @@
+Run LoFTR and DINO on low-res images

@@ -1,0 +1,11 @@
+defaults:
+  - base_config
+  - override triangulation: sequential_low-res
+  - override dino_feature: low-res
+  - _self_
+
+decomp:
+  sfm_preprocess:
+    use_cache: True
+    online: True
+    visualize: True

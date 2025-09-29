@@ -1,0 +1,17 @@
+
+defaults:
+  - base_config
+  - override triangulation: sequential_low-res
+  - override dino_feature: low-res
+  - override decomp/transformer/postprocess_test: inference_cvpr
+  - override decomp/transformer/saving: test_autorecon_cvpr
+  - _self_
+
+decomp:
+  sfm_preprocess:
+    use_cache: True
+    online: True
+    visualize: True
+  transformer:
+    saving:
+      save_dirname: auto-deocomp_sfm-transformer_cvpr

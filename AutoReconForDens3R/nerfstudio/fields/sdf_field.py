@@ -1,0 +1,702 @@
+# Copyright 2022 The Nerfstudio Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""
+Field for compound nerf model, adds scene contraction and image embeddings to instant ngp
+"""
+
+from dataclasses import dataclass, field
+from typing import Optional, Type, Union
+from typing_extensions import Literal
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn
+from torch.nn.parameter import Parameter
+from torchtyping import TensorType
+from rich.console import Console
+
+from nerfstudio.cameras.rays import RaySamples
+from nerfstudio.field_components.embedding import Embedding
+from nerfstudio.field_components.encodings import (
+    Encoding,
+    NeRFEncoding,
+    PeriodicVolumeEncoding,
+    TensorVMEncoding,
+    SHEncoding
+)
+from nerfstudio.field_components.field_heads import FieldHeadNames
+from nerfstudio.field_components.spatial_distortions import SpatialDistortion
+from nerfstudio.field_components.progressive_encoding import ProgressiveEncoding
+from nerfstudio.fields.base_field import Field, FieldConfig
+
+try:
+    import tinycudann as tcnn
+except ImportError:
+    # tinycudann module doesn't exist
+    pass
+
+CONSOLE = Console(width=128)
+
+
+class LaplaceDensity(nn.Module):  # alpha * Laplace(loc=0, scale=beta).cdf(-sdf)
+    """Laplace density from VolSDF"""
+
+    def __init__(self, init_val, beta_min=0.0001):
+        super().__init__()
+        self.register_parameter("beta_min", nn.Parameter(beta_min * torch.ones(1), requires_grad=False))
+        self.register_parameter("beta", nn.Parameter(init_val * torch.ones(1), requires_grad=True))
+
+    def forward(
+        self, sdf: TensorType["bs":...], beta: Union[TensorType["bs":...], None] = None
+    ) -> TensorType["bs":...]:
+        """convert sdf value to density value with beta, if beta is missing, then use learable beta"""
+
+        if beta is None:
+            beta = self.get_beta()
+
+        alpha = 1.0 / beta
+        return alpha * (0.5 + 0.5 * sdf.sign() * torch.expm1(-sdf.abs() / beta))
+
+    def get_beta(self):
+        """return current beta value"""
+        beta = self.beta.abs() + self.beta_min
+        return beta
+
+
+class SigmoidDensity(nn.Module):  # alpha * Laplace(loc=0, scale=beta).cdf(-sdf)
+    """Sigmoid density from VolSDF"""
+
+    def __init__(self, init_val, beta_min=0.0001):
+        super().__init__()
+        self.register_parameter("beta_min", nn.Parameter(beta_min * torch.ones(1), requires_grad=False))
+        self.register_parameter("beta", nn.Parameter(init_val * torch.ones(1), requires_grad=True))
+
+    def forward(
+        self, sdf: TensorType["bs":...], beta: Union[TensorType["bs":...], None] = None
+    ) -> TensorType["bs":...]:
+        """convert sdf value to density value with beta, if beta is missing, then use learable beta"""
+
+        if beta is None:
+            beta = self.get_beta()
+
+        alpha = 1.0 / beta
+
+        # negtive sdf will have large density
+        return alpha * torch.sigmoid(-sdf * alpha)
+
+    def get_beta(self):
+        """return current beta value"""
+        beta = self.beta.abs() + self.beta_min
+        return beta
+
+
+class SingleVarianceNetwork(nn.Module):
+    """Variance network in NeuS
+
+    Args:
+        nn (_type_): init value in NeuS variance network. smaller value leads to larger varaince and
+            smoother initial surface (density field).
+    Returns:
+        inverse std value of logistic distribution ("s" in NeuS's S-density)
+    """
+
+    def __init__(self, init_val):
+        super(SingleVarianceNetwork, self).__init__()
+        self.register_parameter("variance", nn.Parameter(init_val * torch.ones(1), requires_grad=True))
+
+    def forward(self, x):
+        """Returns current variance value"""
+        return torch.ones([len(x), 1], device=x.device) * torch.exp(self.variance * 10.0)
+
+    def get_variance(self):
+        """return current variance value"""
+        return torch.exp(self.variance * 10.0).clip(1e-6, 1e6)
+
+
+@dataclass
+class SDFFieldConfig(FieldConfig):
+    """Nerfacto Model Config"""
+
+    _target: Type = field(default_factory=lambda: SDFField)
+    num_layers: int = 8
+    """Number of layers for geometric network"""
+    hidden_dim: int = 256
+    """Number of hidden dimension of geometric network"""
+    geo_feat_dim: int = 256
+    """Dimension of geometric feature"""
+    num_layers_color: int = 4
+    """Number of layers for color network"""
+    hidden_dim_color: int = 256
+    """Number of hidden dimension of color network"""
+    appearance_embedding_dim: int = 32
+    """Dimension of appearance embedding"""
+    use_appearance_embedding: bool = False
+    """Dimension of appearance embedding"""
+    bias: float = 0.8
+    """sphere size of geometric initializaion"""
+    geometric_init: bool = True
+    """Whether to use geometric initialization"""
+    dynamic_geometric_init: bool = False
+    """whether to infer the best geometric init radius from the given aabb"""
+    inside_outside: bool = True
+    """whether to revert signed distance value, set to True for indoor scene"""
+    weight_norm: bool = True
+    """Whether to use weight norm for linear laer"""
+    use_normalized_raw_coords: bool = False
+    """if True, use normalized positions as raw coordinates of the network input, for geo-init to work properly"""
+    use_grid_feature: bool = False
+    """Whether to use multi-resolution feature grids"""
+    # TODO: build a saperate config for hash grid
+    hash_grid_precision: Literal["float16", "float32"] = "float16"
+    """The floating point precision of the hash grid features (hash only)
+    when using float16, the grid features are stored in float16, but would be transfored to flaot32 for inference
+    """
+    hash_grid_num_levels: int = 16
+    hash_grid_max_res: int = 2048
+    hash_grid_log2_hashmap_size: int = 19
+    hash_grid_smoothstep: bool = True
+    hash_grid_progressive_training: bool = False
+    hash_grid_progressive_training_iters: int = 10000
+    hash_grid_progressive_training_n_levels_init: int = 1
+    use_position_encoding: bool = False
+    """Whether to use positional encoding (even when using feature grids)"""
+    pos_enc_n_freqs: int = 6
+    pos_enc_min_freq: int = 0
+    pos_enc_max_freq: int = 5
+    divide_factor: float = 1.0
+    """Normalization factor for multi-resolution grids"""
+    beta_init: float = 0.1
+    """Init learnable beta value for transformation of sdf to density"""
+    encoding_type: Literal["hash", "periodic", "tensorf_vm"] = "hash"
+    """Encoding type for feature grids"""
+    direction_encoding_type: Literal["nerf", "sh"] = "nerf"
+    color_network_include_sdf: bool = False
+    """Whether to include sdf value in inputs of the color network"""
+    """Encoding type for direction"""
+    spatial_normalization_region: Literal["full", "fg", "aabb"] = "fg"
+    """specify the reigion get normalized to the [[0, 0, 0], [1, 1, 1]] feature grid,
+    if set to "fg", normalize [-1, 1] to [0, 1]; if set to "full", normalize [-2, 2] to [0, 1]"""
+    compute_grad_in_contraction_space: bool = False
+    """compute gradients in the contraction space instead of the euclidean space.
+    the gradients are used as inputs to the color network and computing eikonal loss.
+    """
+    curvature_perturb_step: float = 1e-3  # TODO: tune
+    """perturbation step along a random direction on the tangent plane when computing curvature loss,
+    assuming the fg object is enclosed with a unit cube.
+    """
+
+
+class SDFField(Field):
+    """_summary_
+
+    Args:
+        Field (_type_): _description_
+    """
+
+    config: SDFFieldConfig
+
+    def __init__(
+        self,
+        config: SDFFieldConfig,
+        aabb,
+        num_images: int,
+        use_average_appearance_embedding: bool = False,
+        spatial_distortion: Optional[SpatialDistortion] = None,
+        compute_curvature_loss: bool = False,
+    ) -> None:
+        super().__init__()
+        self.config = config
+        aabb_enlarge = 0.01  # 0.01 is not enough for some instances, some query points might be outside the aabb a little (due to numerical issues?),
+                             # and the reflection padding would be used, causing incorrect sdf values near to the border
+        self.aabb = Parameter(torch.stack([aabb[0] - aabb_enlarge, aabb[1] + aabb_enlarge], 0),
+                              requires_grad=False)  # enlarge the aabb a little
+        self.spatial_distortion = spatial_distortion
+        self.num_images = num_images
+        self.compute_curvature_loss = compute_curvature_loss
+        
+        self._build_geo_encodings()
+        self._build_color_encodings(use_average_appearance_embedding)
+        self._build_geo_networks()
+        self._build_color_networks()
+        
+        # laplace function for transform sdf to density from VolSDF
+        self.laplace_density = LaplaceDensity(init_val=self.config.beta_init)
+        # self.laplace_density = SigmoidDensity(init_val=self.config.beta_init)
+
+        # TODO use different name for beta_init for config
+        # deviation_network to compute alpha from sdf from NeuS
+        self.deviation_network = SingleVarianceNetwork(init_val=self.config.beta_init)
+
+        self.softplus = nn.Softplus(beta=100)
+        self.relu = nn.ReLU()
+        self.sigmoid = torch.nn.Sigmoid()
+
+        self._cos_anneal_ratio = 1.0
+
+    def _build_geo_encodings(self) -> None:
+        self.divide_factor = self.config.divide_factor
+        self.use_grid_feature = self.config.use_grid_feature
+        
+        num_levels = self.config.hash_grid_num_levels  # default: 16
+        max_res = self.config.hash_grid_max_res  # default: 2048
+        base_res = 16
+        log2_hashmap_size = self.config.hash_grid_log2_hashmap_size  # default: 19
+        features_per_level = 2
+        use_hash = True
+        smoothstep = self.config.hash_grid_smoothstep
+        growth_factor = np.exp((np.log(max_res) - np.log(base_res)) / (num_levels - 1))
+        
+        if self.config.encoding_type == "hash":
+            # feature encoding
+            self.encoding = tcnn.Encoding(
+                n_input_dims=3,
+                encoding_config={
+                    "otype": "HashGrid" if use_hash else "DenseGrid",
+                    "n_levels": num_levels,
+                    "n_features_per_level": features_per_level,
+                    "log2_hashmap_size": log2_hashmap_size,
+                    "base_resolution": base_res,
+                    "per_level_scale": growth_factor,
+                    "interpolation": "Smoothstep" if smoothstep else "Linear",  # why Smoothstep? for 2nd derivatives?
+                },
+                dtype=torch.float32 if self.config.hash_grid_precision == "float32" else None,  # cannot use torch.float16 here
+            )
+            if self.config.hash_grid_progressive_training:
+                self.encoding = ProgressiveEncoding(
+                    self.encoding,
+                    n_levels=num_levels,
+                    n_levels_init=self.config.hash_grid_progressive_training_n_levels_init,
+                    n_features_per_level=features_per_level,
+                    n_scheduler_steps=self.config.hash_grid_progressive_training_iters,
+                )
+        elif self.config.encoding_type == "periodic":
+            print("using periodic encoding")
+            self.encoding = PeriodicVolumeEncoding(
+                num_levels=num_levels,
+                min_res=base_res,
+                max_res=max_res,
+                log2_hashmap_size=18,  # 64 ** 3 = 2^18
+                features_per_level=features_per_level,
+                smoothstep=smoothstep,
+            )
+        elif self.config.encoding_type == "tensorf_vm":
+            print("using tensor vm")
+            self.encoding = TensorVMEncoding(128, 24, smoothstep=smoothstep)
+
+        # we concat inputs position ourselves
+        if self.config.use_position_encoding:
+            self.position_encoding = NeRFEncoding(
+                in_dim=3, num_frequencies=self.config.pos_enc_n_freqs,
+                min_freq_exp=self.config.pos_enc_min_freq,
+                max_freq_exp=self.config.pos_enc_max_freq, include_input=False
+            )
+    
+    def _build_geo_networks(self):
+        dims = [self.config.hidden_dim for _ in range(self.config.num_layers)]
+        in_dim = self._get_input_dims()
+        dims = [in_dim] + dims + [1 + self.config.geo_feat_dim]
+        self.num_layers = len(dims)
+        self.skip_in = [4]  # TODO: make configurable
+        # build MLP with geometric initialization
+        for l in range(0, self.num_layers - 1):
+            if l + 1 in self.skip_in:
+                out_dim = dims[l + 1] - dims[0]
+            else:
+                out_dim = dims[l + 1]
+
+            lin = nn.Linear(dims[l], out_dim)
+
+            if self.config.geometric_init:
+                geo_init_radius = self._get_geometric_init_radius()
+                if l == self.num_layers - 2:
+                    if not self.config.inside_outside:
+                        torch.nn.init.normal_(lin.weight, mean=np.sqrt(np.pi) / np.sqrt(dims[l]), std=0.0001)
+                        torch.nn.init.constant_(lin.bias, -geo_init_radius)
+                    else:
+                        torch.nn.init.normal_(lin.weight, mean=-np.sqrt(np.pi) / np.sqrt(dims[l]), std=0.0001)
+                        torch.nn.init.constant_(lin.bias, geo_init_radius)
+                elif l == 0:
+                    torch.nn.init.constant_(lin.bias, 0.0)
+                    torch.nn.init.constant_(lin.weight[:, 3:], 0.0)
+                    torch.nn.init.normal_(lin.weight[:, :3], 0.0, np.sqrt(2) / np.sqrt(out_dim))
+                elif l in self.skip_in:
+                    torch.nn.init.constant_(lin.bias, 0.0)
+                    torch.nn.init.normal_(lin.weight, 0.0, np.sqrt(2) / np.sqrt(out_dim))
+                    torch.nn.init.constant_(lin.weight[:, -(dims[0] - 3):], 0.0)
+                else:
+                    torch.nn.init.constant_(lin.bias, 0.0)
+                    torch.nn.init.normal_(lin.weight, 0.0, np.sqrt(2) / np.sqrt(out_dim))
+
+            if self.config.weight_norm:
+                lin = nn.utils.weight_norm(lin)
+                # print("=======", lin.weight.shape)
+            setattr(self, "glin" + str(l), lin)
+    
+    def _build_color_encodings(self, use_average_appearance_embedding):
+        # per-frame appearance embedding
+        self.appearance_embedding_dim = self.config.appearance_embedding_dim \
+            if self.config.use_appearance_embedding else 0
+        self.embedding_appearance = Embedding(self.num_images, self.appearance_embedding_dim)
+        self.use_average_appearance_embedding = use_average_appearance_embedding
+        
+        # directional embedding
+        self.direction_encoding = self._get_direction_encoding()
+    
+    def _build_color_networks(self):
+        # call self._build_color_encodings() first!
+        dims = [self.config.hidden_dim_color for _ in range(self.config.num_layers_color)]
+        # point, view_direction, normal, feature, embedding
+        in_dim = (
+            3
+            + self.direction_encoding.get_out_dim()
+            + 3
+            + self.config.geo_feat_dim
+            + self.embedding_appearance.get_out_dim()
+        )
+        if self.config.color_network_include_sdf:
+            in_dim = in_dim + 1
+        dims = [in_dim] + dims + [3]
+        self.num_layers_color = len(dims)
+
+        for l in range(0, self.num_layers_color - 1):
+            out_dim = dims[l + 1]
+            lin = nn.Linear(dims[l], out_dim)
+
+            if self.config.weight_norm:
+                lin = nn.utils.weight_norm(lin)
+            # print("=======", lin.weight.shape)
+            setattr(self, "clin" + str(l), lin)
+    
+    def set_cos_anneal_ratio(self, anneal: float) -> None:
+        """Set the anneal value for the proposal network."""
+        self._cos_anneal_ratio = anneal
+
+    def forward_geonetwork(self, inputs):
+        """forward the geonetwork"""
+        positions = self._get_input_positions(inputs)  # in range(0, 1)
+        if self.use_grid_feature:
+            feature = self.encoding(positions)
+
+        coord_inputs = positions if self.config.use_normalized_raw_coords else inputs
+        combined_inputs = [coord_inputs, ]  # must contain raw coordinates for geo-init to work properly
+        if self.config.use_position_encoding:
+            combined_inputs.append(self.position_encoding(positions))
+        if self.use_grid_feature:
+            combined_inputs.append(feature)
+        combined_inputs = torch.cat(combined_inputs, dim=-1).to(torch.float32)
+        x = combined_inputs
+        
+        for l in range(0, self.num_layers - 1):
+            lin = getattr(self, "glin" + str(l))
+
+            if l in self.skip_in:
+                x = torch.cat([x, combined_inputs], 1) / np.sqrt(2)
+
+            x = lin(x)
+
+            if l < self.num_layers - 2:
+                x = self.softplus(x)
+        return x
+
+    def get_sdf(self, ray_samples: RaySamples):
+        """predict the sdf value for ray samples"""
+        positions = ray_samples.frustums.get_start_positions()
+        positions_flat = positions.view(-1, 3)
+        h = self.forward_geonetwork(positions_flat).view(*ray_samples.frustums.shape, -1)
+        sdf, _ = torch.split(h, [1, self.config.geo_feat_dim], dim=-1)
+        return sdf
+
+    def get_gradient(self, ray_samples: RaySamples):
+        positions = ray_samples.frustums.get_start_positions()
+        positions_flat = positions.view(-1, 3)
+        return self.gradient(positions_flat).view(*positions.shape)
+    
+    def gradient(self, x):
+        """compute the gradient of the ray"""
+        x.requires_grad_(True)
+        y = self.forward_geonetwork(x)[:, :1]
+        d_output = torch.ones_like(y, requires_grad=False, device=y.device)
+        gradients = torch.autograd.grad(
+            outputs=y, inputs=x, grad_outputs=d_output, create_graph=True, retain_graph=True, only_inputs=True
+        )[0]
+        return gradients
+
+    def get_density(self, ray_samples: RaySamples):
+        """Computes and returns the densities."""
+        positions = ray_samples.frustums.get_start_positions()
+        positions_flat = positions.view(-1, 3)
+        h = self.forward_geonetwork(positions_flat).view(*ray_samples.frustums.shape, -1)
+        sdf, geo_feature = torch.split(h, [1, self.config.geo_feat_dim], dim=-1)
+        density = self.laplace_density(sdf)
+        return density, geo_feature
+
+    def get_alpha(self, ray_samples: RaySamples, sdf=None, gradients=None):
+        """compute alpha from sdf as in NeuS"""
+        if sdf is None or gradients is None:
+            inputs = ray_samples.frustums.get_start_positions()
+            inputs.requires_grad_(True)
+            with torch.enable_grad():
+                h = self.forward_geonetwork(inputs)
+                sdf, _ = torch.split(h, [1, self.config.geo_feat_dim], dim=-1)
+            d_output = torch.ones_like(sdf, requires_grad=False, device=sdf.device)
+            gradients = torch.autograd.grad(
+                outputs=sdf,
+                inputs=inputs,
+                grad_outputs=d_output,
+                create_graph=True,
+                retain_graph=True,
+                only_inputs=True,
+            )[0]
+
+        # TODO: support manual scaling of inv_s
+        inv_s = self.deviation_network.get_variance()  # Single parameter
+
+        true_cos = (ray_samples.frustums.directions * gradients).sum(-1, keepdim=True)
+
+        # anneal as NeuS
+        cos_anneal_ratio = self._cos_anneal_ratio
+
+        # "cos_anneal_ratio" grows from 0 to 1 in the beginning training iterations. The anneal strategy below makes
+        # the cos value "not dead" at the beginning training iterations, for better convergence.
+        iter_cos = - (
+            F.relu(-true_cos * 0.5 + 0.5) * (1.0 - cos_anneal_ratio) + F.relu(-true_cos) * cos_anneal_ratio
+        )  # always non-positive
+
+        # Estimate signed distances at section points
+        estimated_next_sdf = sdf + iter_cos * ray_samples.deltas * 0.5
+        estimated_prev_sdf = sdf - iter_cos * ray_samples.deltas * 0.5
+
+        prev_cdf = torch.sigmoid(estimated_prev_sdf * inv_s)
+        next_cdf = torch.sigmoid(estimated_next_sdf * inv_s)
+
+        p = prev_cdf - next_cdf
+        c = prev_cdf
+
+        alpha = ((p + 1e-5) / (c + 1e-5)).clip(0.0, 1.0)
+
+        # HF-NeuS
+        # # sigma
+        # cdf = torch.sigmoid(sdf * inv_s)
+        # e = inv_s * (1 - cdf) * (-iter_cos) * ray_samples.deltas
+        # alpha = (1 - torch.exp(-e)).clip(0.0, 1.0)
+
+        return alpha
+
+    def get_occupancy(self, sdf):
+        """compute occupancy as in UniSurf"""
+        occupancy = self.sigmoid(-10.0 * sdf)
+        return occupancy
+
+    def get_colors(self, points, directions, normals, geo_features, camera_indices):
+        """compute colors"""
+        d = self.direction_encoding(directions)
+
+        # per-image appearance embedding
+        embedded_appearance = self._get_appeanreance_embedding(camera_indices, directions)
+
+        features = [points, d, normals, geo_features]
+        if self.appearance_embedding_dim > 0:
+            features.append(embedded_appearance.view(-1, self.appearance_embedding_dim))
+        
+        h = torch.cat(features, dim=-1)
+
+        for l in range(0, self.num_layers_color - 1):
+            lin = getattr(self, "clin" + str(l))
+
+            h = lin(h)
+
+            if l < self.num_layers_color - 2:
+                h = self.relu(h)
+
+        rgb = self.sigmoid(h)
+
+        # unisurf
+        # rgb = self.tanh(h) * 0.5 + 0.5
+
+        return rgb
+
+    def get_outputs(self, ray_samples: RaySamples, return_alphas=False, return_occupancy=False):
+        """compute output of ray samples"""
+        if ray_samples.camera_indices is None:
+            raise AttributeError("Camera indices are not provided.")
+
+        _prefix_dims = ray_samples.frustums.directions.shape[:-1]
+        outputs = {}
+
+        camera_indices = ray_samples.camera_indices.squeeze()
+
+        inputs = ray_samples.frustums.get_start_positions()
+        inputs = inputs.view(-1, 3)
+
+        directions = ray_samples.frustums.directions
+        directions_flat = directions.reshape(-1, 3)
+
+        inputs.requires_grad_(True)
+        with torch.enable_grad():
+            sdf_geo_feature = self.forward_geonetwork(inputs)
+            sdf, geo_feature = torch.split(sdf_geo_feature, [1, self.config.geo_feat_dim], dim=-1)
+        d_output = torch.ones_like(sdf, requires_grad=False, device=sdf.device)
+        gradients = torch.autograd.grad(
+            outputs=sdf, inputs=inputs, grad_outputs=d_output,
+            create_graph=True, retain_graph=True, only_inputs=True
+        )[0]
+        
+        rgb = self.get_colors(inputs, directions_flat, gradients,
+                              sdf_geo_feature if self.config.color_network_include_sdf else geo_feature,
+                              camera_indices)
+
+        density = self.laplace_density(sdf)  # density of VolSDF
+
+        rgb = rgb.view(*_prefix_dims, -1)
+        sdf = sdf.view(*_prefix_dims, -1)
+        density = density.view(*_prefix_dims, -1)
+        gradients = gradients.view(*_prefix_dims, -1)
+        normals = F.normalize(gradients, p=2, dim=-1)
+
+        outputs.update(
+            {
+                FieldHeadNames.RGB: rgb,
+                FieldHeadNames.DENSITY: density,
+                FieldHeadNames.SDF: sdf,
+                FieldHeadNames.NORMAL: normals,
+                FieldHeadNames.GRADIENT: gradients,
+            }
+        )
+
+        if return_alphas:  # alpha of NeuS
+            # TODO use mid point sdf for NeuS
+            alphas = self.get_alpha(ray_samples, sdf, gradients)
+            outputs.update({FieldHeadNames.ALPHA: alphas})
+
+        if return_occupancy:
+            occupancy = self.get_occupancy(sdf)
+            outputs.update({FieldHeadNames.OCCUPANCY: occupancy})
+            
+        if self.compute_curvature_loss:
+            curvature_losses = self._compute_curvature_loss(inputs, normals.view(-1, 3))
+            outputs.update({"curvature_losses": curvature_losses.view(*_prefix_dims, -1)})
+
+        return outputs
+
+    def forward(self, ray_samples: RaySamples, return_alphas=False, return_occupancy=False):
+        """Evaluates the field at points along the ray.
+
+        Args:
+            ray_samples: Samples to evaluate field on.
+        """
+        field_outputs = self.get_outputs(
+            ray_samples, return_alphas=return_alphas, return_occupancy=return_occupancy
+        )
+        return field_outputs
+
+    def _get_appeanreance_embedding(self, camera_indices: TensorType, directions: TensorType) -> TensorType:
+        if self.training:
+            if self.config.use_appearance_embedding:
+                embedded_appearance = self.embedding_appearance(camera_indices)
+            else:  # empty embedding
+                # NOTE: break previously trained models
+                embedded_appearance = torch.zeros(
+                    (*directions.shape[:-1], 0), device=directions.device)
+        else:  # evaluation
+            if self.config.use_appearance_embedding:
+                if self.use_average_appearance_embedding:  # average embedding
+                    embedded_appearance = torch.ones(
+                        (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
+                    ) * self.embedding_appearance.mean(dim=0)
+                else:  # zero embedding
+                    embedded_appearance = torch.zeros(
+                        (*directions.shape[:-1], self.appearance_embedding_dim), device=directions.device
+                    )
+            else:  # empty embedding
+                embedded_appearance = torch.zeros(
+                    (*directions.shape[:-1], 0), device=directions.device)
+        return embedded_appearance
+    
+    def _get_direction_encoding(self):
+        if self.config.direction_encoding_type == "nerf":
+            return NeRFEncoding(
+                in_dim=3, num_frequencies=4, min_freq_exp=0.0, max_freq_exp=3.0, include_input=True
+            )
+        elif self.config.direction_encoding_type == "sh":
+            # TODO: use tcnn.encoding?
+            return SHEncoding(levels=4)  # nc=16
+        else:
+            raise ValueError(f"Unknown direction encoding: {self.config.direction_encoding_type}")
+    
+    def _get_input_dims(self):
+        n_input_dims = 3  # must contain raw coordinates
+        if self.use_grid_feature:
+            n_input_dims += self.encoding.n_output_dims
+        if self.config.use_position_encoding:
+            n_input_dims += self.position_encoding.get_out_dim()
+        assert n_input_dims > 0
+        return n_input_dims
+    
+    def _get_geometric_init_radius(self):
+        """compute the geometric initialization radius"""
+        if not self.config.dynamic_geometric_init:
+            CONSOLE.print(f"Using pre-defined geometric init radius: {self.config.bias:.3f}")
+            return self.config.bias
+        
+        aabb_center = (self.aabb[0, :] + self.aabb[1, :]) / 2.0
+        assert (aabb_center == 0.0).all(), "The dynamic geometric initialization radius is only valid for the origin-centered AABB."
+        aabb_side_lens = self.aabb[1, :] - self.aabb[0, :]
+        radius = float(aabb_side_lens.min()) / 2.0
+        CONSOLE.print(f"Using dynamic geometric init radius: {radius:.3f}")
+        return radius
+
+    def _get_input_positions(self, inputs: torch.Tensor):
+        """compute input positions (for positional encoding / feature encoding)
+        from raw ray sample positions.
+        """
+        # positions = inputs / self.divide_factor
+        positions = self.spatial_distortion(inputs)  # [[-2, -1], [-1, 1], [1, 2]]
+        positions = self._get_normalized_positions(positions)
+        # FIXME: handle positions out of [0, 1] after spatial_distortion & normalization
+        return positions
+    
+    def _get_normalized_positions(self, positions):
+        if self.config.spatial_normalization_region == 'full':
+            return (positions + 2.0) / 4.0
+        elif self.config.spatial_normalization_region == 'fg':
+            return (positions + 1.0) / 2.0
+        elif self.config.spatial_normalization_region == 'aabb':
+            return (positions - self.aabb[0]) / (self.aabb[1] - self.aabb[0])
+        else:
+            raise ValueError(f"Unknown spatial normalization region: {self.config.spatial_normalization_region}")
+
+    def _compute_curvature_loss(self, inputs: TensorType["bs", 3], normals: TensorType["bs", 3]):
+        """compute point-wise approximation of curvature loss used in HashSDF"""
+        # sample locally around inputs
+        perturb_step = self.config.curvature_perturb_step
+        rand_dirs = F.normalize(torch.rand_like(inputs) - 0.5, p=2, dim=-1)
+        tangent_dirs = F.normalize(torch.linalg.cross(normals, rand_dirs), p=2, dim=-1)
+        new_inputs = (inputs + perturb_step * tangent_dirs)  # .detach()
+        
+        # compute new normals
+        new_inputs.requires_grad_(True)
+        with torch.enable_grad():
+            sdf_geo_feature = self.forward_geonetwork(new_inputs)
+            sdf, geo_feature = torch.split(sdf_geo_feature, [1, self.config.geo_feat_dim], dim=-1)
+        d_output = torch.ones_like(sdf, requires_grad=False, device=sdf.device)
+        gradients = torch.autograd.grad(
+            outputs=sdf, inputs=new_inputs, grad_outputs=d_output,
+            create_graph=True, retain_graph=True, only_inputs=True
+        )[0]
+        new_normals = F.normalize(gradients, p=2, dim=-1)
+        
+        losses = ((normals * new_normals).sum(dim=-1, keepdim=True) - 1) ** 2
+        return losses[..., None]
