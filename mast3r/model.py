@@ -91,17 +91,16 @@ class AsymmetricMASt3R(AsymmetricCroCo3DStereo):
         if self.desc_conf_mode is None:
             self.desc_conf_mode = conf_mode
         
-        assert output_mode == "unify"
-        
-        self.ptsmatch_local_head = mast3r_head_factory(head_type='catmlp+dpt', 
-                                                        output_mode='pts3d+desc24', 
-                                                        net=self, has_conf=bool(conf_mode), has_mask=False)
-        self.local_head = transpose_to_landscape(self.ptsmatch_local_head, activate=landscape_only)
-        
-        self.ptsmatch_global_head = mast3r_head_factory(head_type='catmlp+dpt', 
-                                                        output_mode='pts3d+desc24', 
-                                                        net=self, has_conf=bool(conf_mode), has_mask=False)
-        self.global_head = transpose_to_landscape(self.ptsmatch_global_head, activate=landscape_only)
+        if output_mode == "unify":
+            self.ptsmatch_local_head = mast3r_head_factory(head_type='catmlp+dpt', 
+                                                            output_mode='pts3d+desc24', 
+                                                            net=self, has_conf=bool(conf_mode), has_mask=False)
+            self.local_head = transpose_to_landscape(self.ptsmatch_local_head, activate=landscape_only)
+            
+            self.ptsmatch_global_head = mast3r_head_factory(head_type='catmlp+dpt', 
+                                                            output_mode='pts3d+desc24', 
+                                                            net=self, has_conf=bool(conf_mode), has_mask=False)
+            self.global_head = transpose_to_landscape(self.ptsmatch_global_head, activate=landscape_only)
         
         self.normal_local_head = mast3r_head_factory(head_type='dpt', 
                                                         output_mode='normal', 

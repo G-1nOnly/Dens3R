@@ -97,14 +97,17 @@ def rotate_recover(output):
             
             R = torch.from_numpy(Rotation.from_euler('z', 90 * 1, degrees=True).as_matrix()).float()
             if pred_id == "pred1":
-                pts_rotate = torch.rot90(output[pred_id]["pts3d"], k=-1, dims=(1, 2))
-                output[pred_id]["pts3d"] = (R[:3, :3] @ pts_rotate.reshape(-1, 3).T).T.reshape(pts_rotate.shape)
+                if "pts3d" in output[pred_id]:
+                    pts_rotate = torch.rot90(output[pred_id]["pts3d"], k=-1, dims=(1, 2))
+                    output[pred_id]["pts3d"] = (R[:3, :3] @ pts_rotate.reshape(-1, 3).T).T.reshape(pts_rotate.shape)
             else:
-                pts_rotate = torch.rot90(output[pred_id]["pts3d_in_other_view"], k=-1, dims=(1, 2))
-                output[pred_id]["pts3d_in_other_view"] = (R[:3, :3] @ pts_rotate.reshape(-1, 3).T).T.reshape(pts_rotate.shape)
-                
-            output[pred_id]["desc"] = torch.rot90(output[pred_id]["desc"], k=-1, dims=(1, 2))
-            output[pred_id]["desc_conf"] = torch.rot90(output[pred_id]["desc_conf"], k=-1, dims=(1, 2))
+                if "pts3d_in_other_view" in output[pred_id]:
+                    pts_rotate = torch.rot90(output[pred_id]["pts3d_in_other_view"], k=-1, dims=(1, 2))
+                    output[pred_id]["pts3d_in_other_view"] = (R[:3, :3] @ pts_rotate.reshape(-1, 3).T).T.reshape(pts_rotate.shape)
+            if "desc" in output[pred_id]:
+                output[pred_id]["desc"] = torch.rot90(output[pred_id]["desc"], k=-1, dims=(1, 2))
+            if "desc_conf" in output[pred_id]:
+                output[pred_id]["desc_conf"] = torch.rot90(output[pred_id]["desc_conf"], k=-1, dims=(1, 2))
             normal_rotate = torch.rot90(output[pred_id]["normal"], k=-1, dims=(1, 2))
             R = torch.from_numpy(Rotation.from_euler('z', 90 * -1, degrees=True).as_matrix()).float()
             output[pred_id]["normal"] = (R[:3, :3] @ normal_rotate.reshape(-1, 3).T).T.reshape(normal_rotate.shape)
@@ -166,8 +169,16 @@ def infer_imgs(model, img_dir, save_dir,
         else:
             raise NotImplementedError
         rgb = inverse_normalize(view1["img"][0, ...]).detach().cpu().permute(1, 2, 0).numpy() # H, W, 3
-        points_3d = pred1["pts3d"][0, ...].detach().cpu().numpy() # H, W, 3
-        points_3d_another = pred2["pts3d_in_other_view"][0, ...].detach().cpu().numpy() # H, W, 3
+        if "pts3d" in pred1:
+            points_3d = pred1["pts3d"][0, ...].detach().cpu().numpy() # H, W, 3
+            pre_depth = points_3d[..., -1]
+            pcd = points_3d.reshape(-1, 3)
+            o3d_pcd = o3d.geometry.PointCloud()
+            o3d_pcd.points = o3d.utility.Vector3dVector(pcd)
+            pts_rgb = rgb.reshape(-1, 3)
+            o3d_pcd.colors = o3d.utility.Vector3dVector(pts_rgb)
+        if "pts3d_in_other_view" in pred2:
+            points_3d_another = pred2["pts3d_in_other_view"][0, ...].detach().cpu().numpy() # H, W, 3
 
         imgname = images[i]["model_id"]
         pcd_save_path = os.path.join(save_dir, f"{imgname[:-4]}_pointmap.ply")
@@ -175,18 +186,13 @@ def infer_imgs(model, img_dir, save_dir,
         # right hand to left hand
         avg_normal[..., 0] = -avg_normal[..., 0]
         avg_normal_viz = normal2color(avg_normal)
-        pre_depth = points_3d[..., -1]
-        pcd = points_3d.reshape(-1, 3)
-        
-        o3d_pcd = o3d.geometry.PointCloud()
-        o3d_pcd.points = o3d.utility.Vector3dVector(pcd)
-        pts_rgb = rgb.reshape(-1, 3)
-        o3d_pcd.colors = o3d.utility.Vector3dVector(pts_rgb)
         
         ret_dict["normals"].append(avg_normal_viz[..., [2,1,0]])
-        ret_dict["depths"].append(pre_depth)
-        ret_dict["pts"].append(points_3d)
-        ret_dict["pts_another"].append(points_3d_another)
+        if "pts3d" in pred1:
+            ret_dict["depths"].append(pre_depth)
+            ret_dict["pts"].append(points_3d)
+        if "pts3d_in_other_view" in pred2:
+            ret_dict["pts_another"].append(points_3d_another)
         ret_dict["rgbs"].append(rgb)
         if ret_total_output: # not append to save memory
             ret_dict["outputs"].append(output)
@@ -195,11 +201,11 @@ def infer_imgs(model, img_dir, save_dir,
             os.makedirs(save_dir, exist_ok=True)
             np.savez_compressed(pcd_save_path.replace("_pointmap.ply", "_normal.npz"), avg_normal)
             cv2.imwrite(pcd_save_path.replace("_pointmap.ply", "_normal_viz.png"), avg_normal_viz[..., [2,1,0]])
-        if save_depth:
+        if save_depth and "pts3d" in pred1:
             os.makedirs(save_dir, exist_ok=True)
             pre_depth_viz = colorize(pre_depth, cmap="Spectral", vmin=None, vmax=None)
             cv2.imwrite(pcd_save_path.replace("_pointmap.ply", "_depth_viz.png"), pre_depth_viz)
-        if save_pcd:
+        if save_pcd and "pts3d" in pred1:
             os.makedirs(save_dir, exist_ok=True)
             o3d.io.write_point_cloud(pcd_save_path, o3d_pcd)
     

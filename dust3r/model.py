@@ -177,6 +177,9 @@ class AsymmetricCroCo3DStereo (CroCoNet):
                 
                 res1['normal'] = normal_res1['normal']
                 res2['normal'] = normal_res2['normal']
+            elif self.output_mode == "normal":
+                res1 = self.normal_head([tok.float() for tok in dec1], shape1)
+                res2 = self.normal_head([tok.float() for tok in dec2], shape2)
             else:
                 raise NotImplementedError
 

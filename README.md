@@ -8,7 +8,8 @@
 
 Official implementation of "Dens3R: A Foundation Model for 3D Geometry Prediction".
 
-This repository is also a branch of the **Taobao3D** repository. We will also release frontier 3D research projects there, so feel free to check it out and leave a star!
+This repository is now a branch of the **Taobao3D** repository. 
+Please check the [Taobao3D](https://github.com/alibaba/Taobao3D) repo for further releases. We will also release frontier 3D research projects there, so feel free to check it out and leave a star!
 
 <div align="center">
   <img src="./assets/Teaser.jpg"/>
@@ -16,8 +17,7 @@ This repository is also a branch of the **Taobao3D** repository. We will also re
 
 
 ## 📋 TODO
-- [ ] Training Code release 
-- [ ] Checkpoint release 
+- [x] Checkpoint release 
 - [x] AutoRecon Application release 
 - [x] Evaluation Code release 
 - [x] Inference Code release 
@@ -39,7 +39,11 @@ conda activate dens3r
 pip install -r requirements.txt
 
 # download checkpoints
-TODO: The open-sourcing of the model ckpt is currently under approval.
+Please visit https://modelscope.cn/models/Taobao3D/Dens3R/files for model downloading.
+
+# unify.pth: The complete checkpoint v1.0 version trained on public datasets without using any of our internal proprietary datasets.
+
+# normal.pth: The checkpoint is only for normal prediction, trained on all datasets. This checkpoint achieves normal estimation metrics consistent with those reported in our paper, so we specifically release this normal model separately.
 ```
 
 #### 1.2 Install COLMAP[Required]
@@ -134,10 +138,10 @@ Our work builds upon several fantastic open-source projects. We'd like to expres
 
 ## 📚 Citation
 ```bibtex
-@article{dens3r,
-  title={Dens3R: A Foundation Model for 3D Geometry Prediction}, 
-  author={Xianze Fang and Jingnan Gao and Zhe Wang and Zhuo Chen and Xingyu Ren and Jiangjing Lyu and Qiaomu Ren and Zhonglei Yang and Xiaokang Yang and Yichao Yan and Chengfei Lyu},
-  journal={arXiv preprint arXiv:2507.16290},
-  year={2025}
+@inproceedings{dens3r,
+    title={Dens3R: A Foundation Model for 3D Geometry Prediction}, 
+    author={Xianze Fang and Jingnan Gao and Zhe Wang and Zhuo Chen and Xingyu Ren and Jiangjing Lyu and Qiaomu Ren and Zhonglei Yang and Xiaokang Yang and Yichao Yan and Chengfei Lyu},
+    booktitle={The Fourteenth International Conference on Learning Representations},
+    year={2026}
 }
 ```
